@@ -1,0 +1,11 @@
+venv/
+.env
+.DS_Store
+monitoramento_supermercado/venv/
+monitoramento_supermercado/.env
+__pycache__/
+*.pyc
+*.pyo
+**/.env
+**/.env.local
+**/.env.development.local
