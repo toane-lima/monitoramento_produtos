@@ -19,5 +19,4 @@ class Calculareconomia:
         Identifica o supermercado com o menor valor para um produto.
         """
         print("Identificando o melhor custo-benefício...")
-        # Lógica para comparar preços entre supermercados e retornar o vencedor
         pass

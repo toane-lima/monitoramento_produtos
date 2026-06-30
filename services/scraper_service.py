@@ -7,7 +7,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from database.connection import SessionLocal
-from database.models import Produto, RegistroPreco
+from database.models import Produto, RegistroPreco, Supermercado
 
 class ScraperService:
     def __init__(self):
@@ -80,28 +80,22 @@ class ScraperService:
                 preco_texto = preco_elemento.text.strip()
                 
             elif supermercado.lower() == "pao_de_acucar":
-                # 1. Espera o container principal do card carregar
                 wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div[class*='Card-sc']")))
                 
-                # 2. Pega o primeiro card
                 primeiro_card = self.driver.find_element(By.CSS_SELECTOR, "div[class*='Card-sc']")
                 
-                # 3. Busca apenas a tag <a> que contém a classe Title-sc (ignora a tag da imagem)
                 nome_elemento = primeiro_card.find_element(By.CSS_SELECTOR, "a[class*='Title-sc']")
                 
-                # 4. Extrai o nome pelo atributo title ou, como redundância, pelo texto visível
                 nome = nome_elemento.get_attribute("title")
                 if not nome:
                     nome = nome_elemento.text.strip()
                     
-                # 5. Busca o preço dentro do mesmo card
                 preco_elemento = primeiro_card.find_element(By.CSS_SELECTOR, "[class*='PriceValue']")
                 preco_texto = preco_elemento.text.strip()
             
             else:
                 return None, 0.0
 
-            # Prevenção extra: Se o nome vier vazio por algum delay bizarro da página
             if not nome or not preco_texto:
                 return None, 0.0
 
@@ -113,22 +107,34 @@ class ScraperService:
             return nome, valor
             
         except Exception as e:
-            # Retorna silenciosamente em caso de erro para o orquestrador capturar o log
             return None, 0.0
 
-    def salvar_no_banco(self, nome_produto: str, valor: float):
+    def salvar_no_banco(self, nome_produto: str, valor: float, nome_supermercado: str):
         session = SessionLocal()
         try:
+            mercado = session.query(Supermercado).filter_by(nome=nome_supermercado).first()
+            if not mercado:
+                mercado = Supermercado(nome=nome_supermercado)
+                session.add(mercado)
+                session.commit() # Commita para gerar o ID do mercado
+
             produto = session.query(Produto).filter_by(nome=nome_produto).first()
             if not produto:
                 produto = Produto(nome=nome_produto, categoria="Geral")
                 session.add(produto)
-                session.commit()
+                session.commit() # Commita para gerar o ID do produto
             
-            novo_preco = RegistroPreco(valor=valor, produto_id=produto.id)
+            novo_preco = RegistroPreco(
+                valor=valor, 
+                produto_id=produto.id, 
+                supermercado_id=mercado.id
+            )
             session.add(novo_preco)
             session.commit()
-            print(f"💾 Salvo no banco: {nome_produto} - R$ {valor}")
+            print(f"✅ Salvo: {nome_produto} | {nome_supermercado} | R$ {valor}")
+        except Exception as e:
+            session.rollback()
+            print(f"❌ ERRO AO SALVAR: {e}")
         finally:
             session.close()
 

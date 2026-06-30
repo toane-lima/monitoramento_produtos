@@ -23,25 +23,6 @@ class Produto(Base):
     def validarDados(self) -> bool:
         return bool(self.nome and self.categoria)
 
-class RegistroPreco(Base):
-    __tablename__ = 'registros_preco'
-    
-    id = Column(Integer, primary_key=True)
-    valor = Column(Float, nullable=False)
-    data_coleta = Column(DateTime, default=datetime.datetime.utcnow)
-    
-    produto_id = Column(Integer, ForeignKey('produtos.id'))
-    produto = relationship("Produto", back_populates="precos")
-
-    def setPreco(self, valor: float) -> None:
-        self.valor = valor
-
-    def getHistorico(self) -> list:
-        return []
-
-    def calcularMenorPreco(self) -> None:
-        pass
-
 class Supermercado(Base):
     __tablename__ = 'supermercados'
     
@@ -56,6 +37,28 @@ class Supermercado(Base):
     def getLocalidade(self) -> str:
         return self.localidade
 
+class RegistroPreco(Base):
+    __tablename__ = 'registros_preco'
+    
+    id = Column(Integer, primary_key=True)
+    valor = Column(Float, nullable=False)
+    data_coleta = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    produto_id = Column(Integer, ForeignKey('produtos.id'))
+    produto = relationship("Produto", back_populates="precos")
+
+    supermercado_id = Column(Integer, ForeignKey('supermercados.id'))
+    supermercado = relationship("Supermercado")
+
+    def setPreco(self, valor: float) -> None:
+        self.valor = valor
+
+    def getHistorico(self) -> list:
+        return []
+
+    def calcularMenorPreco(self) -> None:
+        pass
+
 class Usuario(Base):
     __tablename__ = 'usuarios'
     
@@ -66,6 +69,7 @@ class Usuario(Base):
     senha = Column(String, nullable=False)
     status_monitoramento = Column(Boolean, default=True, nullable=False)
     data_cadastro = Column(Date, default=datetime.date.today, nullable=False)
+    listas = relationship("ListaCompras", back_populates="usuario")
 
     def salvarLista(self) -> list:
         return []
@@ -86,5 +90,13 @@ class Usuario(Base):
     def autenticar(self, email: str, senha: str) -> bool:
         return self.email == email and self.senha == senha
 
+class ListaCompras(Base):
+    __tablename__ = "lista_compras"
+    id = Column(Integer, primary_key=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"))
+    produto_nome = Column(String) # O nome do produto que ele quer monitorar
+    
+    usuario = relationship("Usuario", back_populates="listas")
+
 mapper_registry = registry()
-mapper_registry.configure()        
+mapper_registry.configure()
