@@ -1,4 +1,6 @@
+import os
 import time
+import shutil
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -12,13 +14,50 @@ from database.models import Produto, RegistroPreco, Supermercado
 class ScraperService:
     def __init__(self):
         options = Options()
-        options.add_argument('--headless=new')
+        options.add_argument("--headless=new")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--disable-software-rasterizer")
+        options.add_argument("--window-size=1920,1080")
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option('useAutomationExtension', False)
-        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+        options.add_experimental_option("useAutomationExtension", False)
+        options.add_argument(
+            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/126.0.0.0 Safari/537.36"
+        )
         
-        self.driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        browser_path = (
+            shutil.which("chromium")
+            or shutil.which("chromium-browser")
+            or shutil.which("google-chrome")
+            or shutil.which("google-chrome-stable")
+        )
+
+        if not browser_path:
+            raise RuntimeError(
+                "Nenhum navegador Chrome/Chromium encontrado no ambiente. "
+                "No Streamlit Cloud, verifique se packages.txt contém chromium."
+            )
+
+        options.binary_location = browser_path
+
+        driver_path = shutil.which("chromedriver")
+
+        if not driver_path:
+            driver_path = ChromeDriverManager().install()
+
+            if "THIRD_PARTY_NOTICES" in driver_path:
+                driver_path = os.path.join(os.path.dirname(driver_path), "chromedriver")
+
+            os.chmod(driver_path, 0o755)
+
+        self.driver = webdriver.Chrome(
+            service=Service(driver_path),
+            options=options
+        )
         self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
     def pesquisar_produto(self, termo: str, supermercado: str):
