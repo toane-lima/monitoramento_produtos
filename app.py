@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from datetime import date, timedelta
+from database.models import Monitoramento, MonitoramentoItem, Produto
 from database.connection import SessionLocal
 from database.models import Usuario, Produto, Supermercado, RegistroPreco
 from streamlit_autorefresh import st_autorefresh
@@ -17,6 +19,8 @@ if "usuario_nome" not in st.session_state:
     st.session_state.usuario_nome = ""
 if "monitorando" not in st.session_state:
     st.session_state.monitorando = False
+if "usuario_id" not in st.session_state:
+    st.session_state.usuario_id = None
 
 # ================= FUNÇÕES DE BANCO DE DADOS =================
 def autenticar_usuario(email, senha):
@@ -47,6 +51,56 @@ def get_produtos_disponiveis():
     produtos = [p.nome for p in session.query(Produto).all()]
     session.close()
     return produtos
+
+def criar_monitoramento(usuario_id, nome_lista, texto_produtos, dias):
+    session = SessionLocal()
+
+    try:
+        produtos = [
+            linha.strip()
+            for linha in texto_produtos.splitlines()
+            if linha.strip()
+        ]
+
+        if not produtos:
+            session.close()
+            return False, "Informe pelo menos um produto."
+
+        data_inicio = date.today()
+        data_fim = data_inicio + timedelta(days=dias)
+
+        novo_monitoramento = Monitoramento(
+            usuario_id=usuario_id,
+            nome_lista=nome_lista,
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            ativo=True,
+            coletas_por_dia=4
+        )
+
+        session.add(novo_monitoramento)
+        session.commit()
+
+        for nome_produto in produtos:
+            item = MonitoramentoItem(
+                monitoramento_id=novo_monitoramento.id,
+                produto_nome=nome_produto
+            )
+            session.add(item)
+
+            produto_existente = session.query(Produto).filter_by(nome=nome_produto).first()
+            if not produto_existente:
+                session.add(Produto(nome=nome_produto, categoria="Geral"))
+
+        session.commit()
+        return True, "Lista de monitoramento criada com sucesso."
+
+    except Exception as e:
+        session.rollback()
+        return False, f"Erro ao criar monitoramento: {e}"
+
+    finally:
+        session.close()
 
 def get_historico_precos(produto_nome):
     """Busca os preços com precisão de minutos para o gráfico rastrear o Scraper em tempo real"""
@@ -93,6 +147,7 @@ if not st.session_state.logado:
                 user = autenticar_usuario(email_login, senha_login)
                 if user:
                     st.session_state.logado = True
+                    st.session_state.usuario_id = user.id
                     st.session_state.usuario_nome = user.nome
                     st.rerun()
                 else:
@@ -134,6 +189,70 @@ else:
         
         localidade = st.selectbox("📍 Localidade:", ["Natal/RN"])
         btn_comparar = st.button("Comparar Preços 🔍", type="primary", use_container_width=True)
+
+        st.markdown("### ➕ Nova lista de monitoramento")
+
+        nome_lista = st.text_input("Nome da lista:", placeholder="Ex: Compras da semana")
+
+        texto_produtos = st.text_area(
+            "Digite os produtos, um por linha:",
+            placeholder="Arroz Integral Camil\nFeijão Carioca\nCafé Pilão"
+        )
+
+        dias_monitoramento = st.number_input(
+            "Monitorar por quantos dias?",
+            min_value=1,
+            max_value=30,
+            value=7
+        )
+
+        if st.button("Salvar lista e iniciar monitoramento"):
+            sucesso, mensagem = criar_monitoramento(
+                st.session_state.usuario_id,
+                nome_lista,
+                texto_produtos,
+                dias_monitoramento
+            )
+
+            if sucesso:
+                st.success(mensagem)
+            else:
+                st.error(mensagem)
+        
+        st.divider()
+        st.markdown("### 🚀 Coleta manual")
+
+        st.info(
+            "Use este botão quando quiser executar uma coleta agora, "
+            "além das coletas agendadas 4 vezes ao dia."
+        )
+
+        if st.button("Rodar coleta manual agora", type="secondary", use_container_width=True):
+            if not st.session_state.usuario_id:
+                st.error("Usuário não identificado. Faça login novamente.")
+            else:
+                with st.spinner("Executando coleta manual. Isso pode levar alguns minutos..."):
+                    try:
+                        from executar_scraping import rodar_coleta
+
+                        resultado = rodar_coleta(usuario_id=st.session_state.usuario_id)
+
+                        if resultado["produtos"] == 0:
+                            st.warning(
+                                "Nenhum produto ativo encontrado para este usuário. "
+                                "Crie uma lista de monitoramento primeiro."
+                            )
+                        else:
+                            st.success("Coleta manual finalizada.")
+                            st.write(f"Produtos monitorados: {resultado['produtos']}")
+                            st.write(f"Tentativas: {resultado['tentativas']}")
+                            st.write(f"Sucessos: {resultado['sucessos']}")
+                            st.write(f"Falhas: {resultado['falhas']}")
+
+                            st.rerun()
+
+                    except Exception as e:
+                        st.error(f"Erro ao executar coleta manual: {e}")
 
     # --- ÁREA PRINCIPAL ---
     st.title("📊 Painel de Monitoramento de Preços")

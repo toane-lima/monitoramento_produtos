@@ -93,10 +93,35 @@ class Usuario(Base):
 class ListaCompras(Base):
     __tablename__ = "lista_compras"
     id = Column(Integer, primary_key=True)
-    usuario_id = Column(Integer, ForeignKey("usuarios.id"))
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"))
     produto_nome = Column(String) # O nome do produto que ele quer monitorar
     
     usuario = relationship("Usuario", back_populates="listas")
 
 mapper_registry = registry()
 mapper_registry.configure()
+
+class Monitoramento(Base):
+    __tablename__ = "monitoramentos"
+
+    id = Column(Integer, primary_key=True)
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
+    nome_lista = Column(String, nullable=False)
+    data_inicio = Column(Date, default=datetime.date.today, nullable=False)
+    data_fim = Column(Date, nullable=False)
+    ativo = Column(Boolean, default=True, nullable=False)
+    coletas_por_dia = Column(Integer, default=4, nullable=False)
+    criado_em = Column(DateTime, default=datetime.datetime.utcnow)
+
+    usuario = relationship("Usuario")
+    itens = relationship("MonitoramentoItem", back_populates="monitoramento")
+
+
+class MonitoramentoItem(Base):
+    __tablename__ = "monitoramento_itens"
+
+    id = Column(Integer, primary_key=True)
+    monitoramento_id = Column(Integer, ForeignKey("monitoramentos.id"), nullable=False)
+    produto_nome = Column(String, nullable=False)
+
+    monitoramento = relationship("Monitoramento", back_populates="itens")
